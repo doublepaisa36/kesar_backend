@@ -1,0 +1,86 @@
+version: '3.9'
+
+services:
+  db:
+    image: postgres:14-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -d appdb -U postgres"]
+      interval: 5s
+      timeout: ts
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  redpanda:
+    image: vectorized/redpanda:latest
+    command: 
+      - redpanda 
+      - start
+      - overprovisioned
+      - --smp 
+      - '1'
+      - -memory
+      - '1G'
+      - --reserve-memory 
+      - 0M
+      - --node_id
+      - '0'
+      - --check=false
+    ports:
+      - "9092:9092"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:latest
+    volumes:
+      - ./otel-collector-config.yaml:/etc/otel/config.yaml
+    command: ["--config", "/etc/otel/config.yaml"]
+    depends_on:
+      - jaeger
+    ports:
+      - "4317:4317"   # OTLP gRPC receiver
+      - "4318:4318"   # OTLP HTTP receiver (optional)
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+      - "16686:16686" # Jaeger UI
+      - "14250:14250" # Jaeger gRPC (collector)
+      - "14268:14268" # Jaeger HTTP
+
+  api: 
+    build:
+      context: .
+      dockerfile: packages/api/Dockerfile
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
+      - REDIS_URL=redis://redis:6379
+      - KAFKA_BROKER=redpanda:9092
+      - OTEL_COLLECTOR_URL=grpc://otel-collector:4317
+      - PORT=3000
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+
+  worker:
+    build:
+      context: .
+      dockerfile: packages/worker/Dockerfile
+    environment:
+      - NODE_ENV=production
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
+      - KAFKA_BROKER=redpanda:9092
+      - OTEL_COLLECTOR_URL=grpc://otel-collector:4317
+    depends_on:
+      - db
