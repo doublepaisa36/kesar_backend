@@ -1,0 +1,46 @@
+generator client {
+    provider = "prisma-client-js"
+}
+
+datasource db {
+    provider = "postgres"
+    url      = env("DATABASE_URL")
+}
+
+// Enums
+enum AccoutCategory {
+    USER
+    EXTERNAL
+    WAGER
+    PROFIT
+}
+
+enum BetResult {
+    PENDING
+    WON
+    LOST
+    PUSH
+}
+
+enum DepositStatus {
+    PENDING
+    COMPLETED
+}
+
+// Models
+model Tenant {
+    id String @id @default(uuid())
+    name String
+    users User[]
+}
+
+model Role {
+    id String @id @default(autoincrement())
+    name String @unique
+    users User[]
+    permissions RolePermission[]
+}
+
+model Permission {
+    id Int @id @default(autoincrement())
+}
