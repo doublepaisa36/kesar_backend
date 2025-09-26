@@ -13,14 +13,7 @@ export function buildApp(){
     //security plugins
     fastify.register(cors);
     fastify.register(helmet, {global:true});
-    const redisClient = process.env.REDIS_URL ? new redis(process.env.REDIS_URL) : null;
-    fastify.register(rateLimit, {
-    max: 100,
-    timeWindow: '1 minute',
-    allowList: ['127.0.0.1'],
-    redis: redisClient
-  });
-
+    
 
     return fastify
 }
