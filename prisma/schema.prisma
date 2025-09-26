@@ -1,46 +1,183 @@
 generator client {
-    provider = "prisma-client-js"
+  provider = "prisma-client-js"
 }
 
 datasource db {
-    provider = "postgres"
-    url      = env("DATABASE_URL")
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
 }
 
 // Enums
-enum AccoutCategory {
-    USER
-    EXTERNAL
-    WAGER
-    PROFIT
+enum AccountCategory {
+  USER
+  EXTERNAL
+  WAGER
+  PROFIT
 }
 
-enum BetResult {
-    PENDING
-    WON
-    LOST
-    PUSH
+enum BetLegResult {
+  PENDING
+  WON
+  LOST
+  PUSH
 }
 
 enum DepositStatus {
-    PENDING
-    COMPLETED
+  PENDING
+  COMPLETED
 }
 
 // Models
 model Tenant {
-    id String @id @default(uuid())
-    name String
-    users User[]
+  id    String @id @default(uuid())
+  name  String
+  users User[]
 }
 
 model Role {
-    id String @id @default(autoincrement())
-    name String @unique
-    users User[]
-    permissions RolePermission[]
+  id          Int              @id @default(autoincrement())
+  name        String           @unique
+  users       User[]
+  permissions RolePermission[]
 }
 
 model Permission {
-    id Int @id @default(autoincrement())
+  id    Int              @id @default(autoincrement())
+  name  String           @unique
+  roles RolePermission[]
+}
+
+model RolePermission {
+  roleId       Int
+  permissionId Int
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model User {
+  id             String          @id @default(uuid())
+  tenant         Tenant?         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenantId       String?
+  role           Role?           @relation(fields: [roleId], references: [id], onDelete: SetNull)
+  roleId         Int?
+  name           String
+  email          String          @unique
+  passwordHash   String?
+  apiKey         String          @unique
+  accounts       Account[]
+  bets           Bet[]
+  depositIntents DepositIntent[]
+  idempotencyKeys   IdempotencyKey[]
+}
+
+model Account {
+  id            String          @id @default(uuid())
+  name          String
+  category      AccountCategory
+  user          User?           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String?
+  balance       Int             @default(0)
+  ledgerEntries LedgerEntry[]
+}
+
+model Journal {
+  id                  String         @id @default(uuid())
+  createdAt           DateTime       @default(now())
+  isReversal          Boolean        @default(false)
+  reversalOf          Journal?       @relation("JournalReversal", fields: [reversalOfJournalId], references: [id])
+  reversalOfJournalId String?
+  reversedBy          Journal[]       @relation("JournalReversal")
+  balance             Int            @default(0)
+  ledgerEntries       LedgerEntry[]
+  bet                 Bet[]
+  depositIntent       DepositIntent?
+}
+
+model LedgerEntry {
+  id        String  @id @default(uuid())
+  journal   Journal @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  journalId String
+  account   Account @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  accountId String
+  amount    Int
+}
+
+model Event {
+  id       String    @id @default(uuid())
+  name     String
+  startsAt DateTime?
+  markets  Market[]
+}
+
+model Market {
+  id       String    @id @default(uuid())
+  event    Event     @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  eventId  String
+  name     String
+  outcomes Outcome[]
+}
+
+model Outcome {
+  id       String   @id @default(uuid())
+  market   Market   @relation(fields: [marketId], references: [id], onDelete: Cascade)
+  marketId String
+  name     String
+  odds     Float
+  betLegs  BetLeg[]
+}
+
+model Bet {
+  id             String   @id @default(uuid())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String
+  stake          Int
+  placedAt       DateTime @default(now())
+  status         String   @default("PENDING")
+  stakeJournal   Journal? @relation(fields: [stakeJournalId], references: [id], onDelete: SetNull)
+  stakeJournalId String?  @unique
+  betLegs        BetLeg[]
+}
+
+model BetLeg {
+  id        String       @id @default(uuid())
+  bet       Bet          @relation(fields: [betId], references: [id], onDelete: Cascade)
+  betId     String
+  outcome   Outcome      @relation(fields: [outcomeId], references: [id], onDelete: Cascade)
+  outcomeId String
+  odds      Float
+  result    BetLegResult @default(PENDING)
+}
+
+model DepositIntent {
+  id               String        @id @default(uuid())
+  user             User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId           String
+  amount           Int
+  status           DepositStatus @default(PENDING)
+  createdAt        DateTime      @default(now())
+  completedAt      DateTime?
+  depositJournal   Journal?      @relation(fields: [depositJournalId], references: [id], onDelete: SetNull)
+  depositJournalId String?       @unique
+}
+
+model Outbox {
+  id          String    @id @default(uuid())
+  eventType   String
+  payload     Json
+  createdAt   DateTime  @default(now())
+  publishedAt DateTime?
+}
+
+model IdempotencyKey {
+  key            String   @id
+  requestPath    String?
+  requestMethod  String?
+  userId         String?
+  user           User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  responseStatus Int?
+  responseBody   Json?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 }
