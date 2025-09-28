@@ -7,6 +7,7 @@ import {PrismaClient} from '@prisma/client'
 import betRoutes from './routes/bets.js'
 import eventRoutes from './routes/events.js'
 import authPlugin from './plugins/auth.js'
+import healthRoutes from './routes/health.js'
 import idempotencyPlugin from './plugins/idempotency.js'
 
 export function buildApp(){
@@ -25,7 +26,8 @@ export function buildApp(){
 
     //Register application routes
     fastify.register(betRoutes);
-    fastify.register(eventRoutes)
+    fastify.register(eventRoutes);
+    fastify.register(healthRoutes);
     
 
     return fastify
